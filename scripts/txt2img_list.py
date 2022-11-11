@@ -285,31 +285,6 @@ def main():
     base_count = len(os.listdir(sample_path))
     grid_count = len(os.listdir(outpath)) - 1
 
-    style_list = "ch_style.txt"
-    n_each = 4
-    n_cycles = 10
-    styles_count = 1
-
-    types = []
-    if style_list != "":
-        with open(style_list, "r") as file:
-            for line in file:
-                line = line.strip('\n')
-                line = line.replace("_", " ")
-                types.append(line)
-        print("types: ")
-        # print(types)
-
-    # artists = []
-    # if artists_list != "":
-    #     with open(artists_list, "r") as file:
-    #         for line in file:
-    #             line = line.strip('\n')
-    #             artists.append(line)
-    #     print("artists: ")
-    #     print(artists)
-
-
     start_code = None
     if opt.fixed_code:
         start_code = torch.randn([opt.n_samples, opt.C, opt.H // opt.f, opt.W // opt.f], device=device)
@@ -324,66 +299,56 @@ def main():
 
                     for prompts in tqdm(data, desc="data"):
 
-                        or_prompt = prompts
-                        print(or_prompt)
+                        or_prompt,  = prompts
+                        print(prompts);
+                        pr = or_prompt.split(":");
+                        print(pr);
 
-                        for cy in range(0, len(types)-1):
+                        cur_pr = pr[0]
+                        cur_seed = int(pr[1]);
+                        uc = None
+                        if opt.scale != 1.0:
+                            uc = model.get_learned_conditioning(batch_size * [""])
+                        if isinstance(prompts, tuple):
+                            prompts = list(prompts)
+                        prompts = [cur_pr]
+                        seed_everything(cur_seed)
+                        c = model.get_learned_conditioning(prompts)
+                        shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
+                        samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
+                                                             conditioning=c,
+                                                             batch_size=opt.n_samples,
+                                                             shape=shape,
+                                                             verbose=False,
+                                                             unconditional_guidance_scale=opt.scale,
+                                                             unconditional_conditioning=uc,
+                                                             eta=opt.ddim_eta,
+                                                             x_T=start_code)
 
-                            cur_pr = ''
-                            cur_pr = or_prompt[0]
-                            fname = cur_pr.replace(" ", "_")
-                            fname = cur_pr.replace(" ", "_")
-                            fname = fname.replace(",", "_")
-                            fname = fname.replace(".", "_")
-                            fname = fname.replace("/", "_")
-                            fname = fname + "__" + str(cy)
+                        x_samples_ddim = model.decode_first_stage(samples_ddim)
+                        x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
+                        x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
 
-                            # if len(types) > 0:
-                            #     for q in range(0, random.randint(1, styles_count)):
-                            #         cur_pr = cur_pr + ', ' + types[random.randint(0, len(types) - 1)]
+                        x_checked_image, has_nsfw_concept = check_safety(x_samples_ddim)
 
-                            cur_pr = cur_pr + ', ' + types[cy]
-                            print(cur_pr)
+                        x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)
 
-                            for q in range(0, n_each):
-                                print(q)
-                                uc = None
-                                if opt.scale != 1.0:
-                                    uc = model.get_learned_conditioning(batch_size * [""])
-                                if isinstance(prompts, tuple):
-                                    prompts = list(prompts)
-                                prompts = [cur_pr]
-                                print(prompts)
-                                c = model.get_learned_conditioning(prompts)
-                                shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
-                                samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
-                                                                 conditioning=c,
-                                                                 batch_size=opt.n_samples,
-                                                                 shape=shape,
-                                                                 verbose=False,
-                                                                 unconditional_guidance_scale=opt.scale,
-                                                                 unconditional_conditioning=uc,
-                                                                 eta=opt.ddim_eta,
-                                                                 x_T=start_code)
+                        fname = cur_pr.replace(" ", "_")
+                        fname = fname.replace(",", "_")
+                        fname = fname.replace(".", "_")
+                        fname = fname.replace("/", "_")
+                        fname = fname[0:20];
 
-                                x_samples_ddim = model.decode_first_stage(samples_ddim)
-                                x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
-                                x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
+                        if not opt.skip_save:
+                            for x_sample in x_checked_image_torch:
+                                x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
+                                img = Image.fromarray(x_sample.astype(np.uint8))
+                                img = put_watermark(img, wm_encoder)
+                                img.save(os.path.join(sample_path, f"{base_count:05} - {fname}.png"))
+                                base_count += 1
 
-                                x_checked_image, has_nsfw_concept = check_safety(x_samples_ddim)
-
-                                x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)
-
-                                if not opt.skip_save:
-                                    for x_sample in x_checked_image_torch:
-                                        x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
-                                        img = Image.fromarray(x_sample.astype(np.uint8))
-                                        img = put_watermark(img, wm_encoder)
-                                        img.save(os.path.join(sample_path, f"{base_count:05} - {fname}.png"))
-                                        base_count += 1
-
-                                if not opt.skip_grid:
-                                    all_samples.append(x_checked_image_torch)
+                        if not opt.skip_grid:
+                            all_samples.append(x_checked_image_torch)
 
                 if not opt.skip_grid:
                     # additionally, save as grid

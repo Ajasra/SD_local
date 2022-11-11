@@ -1,0 +1,1 @@
+python scripts/img2img.py --prompt --from-file indigenous.txt --init-img l1.jpg --strength 0.8 --ckpt sd-v1-4.ckpt --n_iter 1 --n_samples 1 --ddim_steps 200

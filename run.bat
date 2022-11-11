@@ -1,0 +1,1 @@
+python scripts/txt2img.py --from-file character.txt --seed 568414 --skip_grid --ckpt sd-v1-4.ckpt --outdir monkey --skip_grid --ddim_steps 150 --n_iter 3 --H 512 --W 384 --n_samples 1 --scale 20 --plms

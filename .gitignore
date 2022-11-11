@@ -1,0 +1,10 @@
+/.idea/
+/blocked/samples/
+/generated-images-3/samples/
+/generated-images-4/samples/
+/generated-images-5/samples/
+/generated-images-6/samples/
+/sd-v1-4.ckpt
+blocked*
+character*
+*.txt
